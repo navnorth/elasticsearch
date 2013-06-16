@@ -18,7 +18,7 @@ abstract class Base {
      * @var string
      */
     protected $host = "";
-    
+
     /**
      * Port to connect on
      * @var int
@@ -30,7 +30,7 @@ abstract class Base {
      * @var string
      */
     protected $index;
-    
+
     /**
      * ElasticSearch document type
      * @var string
@@ -64,6 +64,7 @@ abstract class Base {
      * @param string|array $path
      * @param string $method
      * @param array|bool $payload
+     * @return
      */
     abstract public function request($path, $method="GET", $payload=false);
 
