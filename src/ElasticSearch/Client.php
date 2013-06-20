@@ -29,6 +29,7 @@ class Client {
     protected static $_protocols = array(
         'http' => 'ElasticSearch\\Transport\\HTTP',
         'memcached' => 'ElasticSearch\\Transport\\Memcached',
+        'rabbitmq' => 'ElasticSearch\\Transport\\RabbitMQ',
     );
 
     private $transport, $index, $type;
