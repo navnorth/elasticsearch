@@ -17,7 +17,7 @@ use amqphp\Connection;
 
 class RabbitMQ extends Base {
 
-    protected $user, $past, $vhost, $conn, $channel;
+    protected $user, $past, $vhost, $connParams;
 
     public function __construct($host="127.0.0.1", $port=5672, $user = 'guest', $pass = 'guest', $vhost = '/') {
         parent::__construct($host, $port);
@@ -26,7 +26,7 @@ class RabbitMQ extends Base {
         $this->pass = $pass;
         $this->vhost = $vhost;
 
-        $this->conn = new Connection(array(
+        $this->connParams = array(
             'socketParams' => array(
                 'host' => $host,
                 'port' => $port,
@@ -34,11 +34,7 @@ class RabbitMQ extends Base {
             'username' => $user,
             'userpass' => $pass,
             'vhost' => $vhost
-        ));
-
-        $this->conn->connect();
-
-        $this->channel = $this->conn->openChannel();
+        );
     }
 
     /**
@@ -117,6 +113,7 @@ class RabbitMQ extends Base {
         return $this->sendRequest(array('delete' => $meta));
     }
 
+
     public function sendRequest($meta, $doc = null)
     {
         $message = is_string($meta) ? $meta : json_encode($meta);
@@ -138,12 +135,22 @@ class RabbitMQ extends Base {
             'routing-key' => 'elasticsearch',
         );
 
-        $msg = $this->channel->basic('publish', $params, $message);
-        return array( 'result' => $this->channel->invoke($msg));
+        $conn = $this->_openConnection();
+
+        $channel = $conn->openChannel();
+
+        $msg = $channel->basic('publish', $params, $message);
+        $result =  array( 'result' => $channel->invoke($msg));
+
+        return $result;
     }
 
-    public function __destruct()
+    protected function _openConnection()
     {
-        $this->conn->shutdown();
+        $conn = new Connection($this->connParams);
+        $conn->connect();
+
+        return $conn;
     }
+
 }
