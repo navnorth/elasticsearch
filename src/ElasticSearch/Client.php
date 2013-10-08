@@ -260,7 +260,7 @@ class Client {
      */
     protected function expandPath($path) {
         $path = (array) $path;
-        $isAbsolute = $path[0][0] === '/';
+        $isAbsolute = strlen($path[0]) && $path[0][0] === '/';
 
         return $isAbsolute
             ? $path
