@@ -30,6 +30,11 @@ class Bulk {
     const DELETE = 'delete';
 
     /**
+     * @const string Indicate update operation
+     */
+    const UPDATE = 'update';
+
+    /**
      * @var ElasticSearchTransport The transport
      */
     protected $transport;
@@ -85,6 +90,24 @@ class Bulk {
             $meta['_type'] = $this->type;
 
         $this->chunks[] = $this->encode_operation(self::INDEX, $meta, $doc);
+    }
+
+    /**
+     * update a document
+     *
+     * @param array $doc A document to update
+     * @param array $meta The metadata to use if it is an array, id otherwise
+     * @param array $options unused
+     */
+    public function update($doc, $meta = array(), $options = array()) {
+        if (!is_array($meta))
+            $meta = array("_id" => $meta);
+        if (!isset($meta["_index"]))
+            $meta['_index'] = $this->index;
+        if (!isset($meta["_type"]))
+            $meta['_type'] = $this->type;
+
+        $this->chunks[] = $this->encode_operation(self::UPDATE, $meta, $doc);
     }
 
     /**
