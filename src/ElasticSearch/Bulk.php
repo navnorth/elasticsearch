@@ -107,7 +107,7 @@ class Bulk {
         if (!isset($meta["_type"]))
             $meta['_type'] = $this->type;
 
-        $this->chunks[] = $this->encode_operation(self::UPDATE, $meta, $doc);
+        $this->chunks[] = $this->encode_operation(self::UPDATE, $meta, array('doc' => $doc));
     }
 
     /**
