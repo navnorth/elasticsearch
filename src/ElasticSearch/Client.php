@@ -77,7 +77,15 @@ class Client {
 
         $server = is_array($config['servers']) ? $config['servers'][0] : $config['servers'];
         list($host, $port) = explode(':', $server);
-        $transport = new $class($host, $port);
+
+        $params = isset($config['transport_params']) ? array_values($config['transport_params']) : array();
+
+        array_unshift($params, $port);
+        array_unshift($params, $host);
+
+        $reflector = new \ReflectionClass($class);
+        $transport = $reflector->newInstanceArgs($params);
+
         $client = new self($transport, $config['index'], $config['type']);
         $client->config($config);
         return $client;
