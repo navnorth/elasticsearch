@@ -20,7 +20,7 @@ class HTTP extends Base {
     /**
      * How long before timing out CURL call
      */
-    const TIMEOUT = 5;
+    protected $timeout = 5;
 
     /**
      * curl handler which is needed for reusing existing http connection to the server
@@ -29,7 +29,7 @@ class HTTP extends Base {
     protected $ch;
 
 
-    public function __construct($host='localhost', $port=9200) {
+    public function __construct($host='localhost', $port=9200, $timeout = null) {
         parent::__construct($host, $port);
         if(null !== $timeout) {
             $this->setTimeout($timeout);
