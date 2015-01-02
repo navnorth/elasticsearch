@@ -8,6 +8,9 @@ use ElasticSearch\tests\Helper;
 class Client extends \ElasticSearch\tests\Base
 {
     public function tearDown() {
+        \ElasticSearch\Client::connection()->setIndex('index')->delete();
+        \ElasticSearch\Client::connection()->setIndex('index2')->delete();
+        \ElasticSearch\Client::connection()->setIndex('test-index')->delete();
         \ElasticSearch\Client::connection()->delete();
     }
 
@@ -17,7 +20,8 @@ class Client extends \ElasticSearch\tests\Base
             'protocol' => 'http',
             'servers' => 'test.com:9100',
             'index' => 'index',
-            'type' => 'type'
+            'type' => 'type',
+            'timeout' => null,
         );
         $this->assert->array($search->config())
             ->isEqualTo($config);
@@ -26,7 +30,8 @@ class Client extends \ElasticSearch\tests\Base
     public function testAbsoluteRequest() {
         $client = \ElasticSearch\Client::connection();
         $resp = $client->request('/');
-        $this->assert->array($resp)->hasKey('ok')
+        $this->assert->array($resp)
+            ->integer($resp['status'])->isEqualTo(200)
             ->string($resp['tagline'])->isEqualTo('You Know, for Search');
     }
 
@@ -40,9 +45,7 @@ class Client extends \ElasticSearch\tests\Base
         );
         $client = \ElasticSearch\Client::connection();
         $resp = $client->index($doc, $tag, array('refresh' => true));
-
-        $this->assert->array($resp)->hasKey('ok')
-            ->boolean($resp['ok'])->isTrue(1);
+        $this->assert->array($resp)->boolean($resp['created'])->isTrue(1);
 
         $fetchedDoc = $client->get($tag);
         $this->assert->array($fetchedDoc)->isEqualTo($doc);
@@ -71,8 +74,8 @@ class Client extends \ElasticSearch\tests\Base
         );
         $client = \ElasticSearch\Client::connection();
         $resp = $client->index($doc, false, array('refresh' => true));
-        $this->assert->array($resp)->hasKey('ok')
-            ->boolean($resp['ok'])->isTrue(1);
+        $this->assert->array($resp)
+            ->boolean($resp['created'])->isTrue(1);
     }
 
     /**
@@ -87,7 +90,9 @@ class Client extends \ElasticSearch\tests\Base
         $client->refresh();
 
         $del = $client->deleteByQuery(array(
-            'term' => array('title' => $word)
+            'query' => array(
+                             'term' => array('title' => $word)
+                             )
         ));
 
         $hits = $client->search(array(
@@ -123,7 +128,7 @@ class Client extends \ElasticSearch\tests\Base
                         'term' => array('title' => $uniqueWord)
                     ),
                     'should' => array(
-                        'field' => array(
+                        'term' => array(
                             'tag' => 'stuff'
                         )
                     )
@@ -169,7 +174,7 @@ class Client extends \ElasticSearch\tests\Base
     public function testSearchThrowExceptionWhenServerDown() {
         $client = \ElasticSearch\Client::connection(array(
             'servers' => array(
-                '127.0.0.1:9300'
+                '127.0.0.1:9201'
             )
         ));
 
@@ -222,6 +227,71 @@ class Client extends \ElasticSearch\tests\Base
             ->hasKeys(array('index', 'type'));
         $this->assert->string($config['index'])->isEqualTo('index');
         $this->assert->string($config['type'])->isEqualTo('type');
+        putenv("ELASTICSEARCH_URL");
+    }
+
+    public function testBulk() {
+        $esURL = 'http://127.0.0.1:9200/index/type';
+        putenv("ELASTICSEARCH_URL={$esURL}");
+
+        $client = \ElasticSearch\Client::connection();
+        $bulk = $client->beginBulk();
+
+        $doc = array(
+            'title' => 'First in Line' 
+        );
+
+        $client->index($doc, false, array('refresh' => true));
+
+        $doc2 = array(
+            'title' => 'Second in Line' 
+        );
+        $client->setType('type2');
+        $client->index($doc2, false);
+
+        $client->setIndex('index2');
+
+        $client->delete(55);
+
+        $operations = $bulk-> getOperations();
+        $this->assert->integer($bulk->count())->isEqualTo(3)
+                     ->array($operations[1])
+                     ->hasSize(2)
+                     ->array($operations[0])
+                     ->hasSize(2)
+                     ->array($operations[0][0])->hasKey('index')
+                     ->array($operations[0][0]['index'])->hasKey('_refresh')
+                     ->boolean($operations[0][0]['index']['_refresh'])->isEqualTo(true)
+                     ->array($operations[1][1])->isEqualTo($doc2)
+                     ->array($operations[2][0])->hasKey('delete')
+                     ->array($operations[2][0]['delete'])->hasKey('_id')
+                     ->integer($operations[2][0]['delete']['_id'])->isEqualTo(55)
+;
+
+        $payload = '{"index":{"_id":false,"_index":"index","_type":"type","_refresh":true}}'
+        ."\n".'{"title":"First in Line"}'
+        ."\n".'{"index":{"_id":false,"_index":"index","_type":"type2"}}'
+        ."\n".'{"title":"Second in Line"}'
+        ."\n".'{"delete":{"_id":55,"_index":"index2","_type":"type2"}}'."\n"
+;
+
+        $this->assert->string($bulk->createPayload())->isEqualTo($payload);
+
+        // Run multiple bulks and make sure all documents are stored
+        $client->beginBulk();
+        $client->index(array('title' => 'Bulk1'), 1);
+        $client->index(array('title' => 'Bulk2'), 2);
+        $client->commitBulk();
+        $client->beginBulk();
+        $client->index(array('title' => 'Bulk3'), 3);
+        $client->index(array('title' => 'Bulk4'), 4);
+        $client->commitBulk();
+        sleep(1);
+        $resp = $client->search('title:Bulk*');
+        $this->assert->array($resp)->hasKey('hits')
+            ->array($resp['hits'])->hasKey('total')
+            ->integer($resp['hits']['total'])->isEqualTo(4);
+
         putenv("ELASTICSEARCH_URL");
     }
 }

@@ -31,6 +31,9 @@ class HTTP extends Base {
 
     public function __construct($host='localhost', $port=9200) {
         parent::__construct($host, $port);
+        if(null !== $timeout) {
+            $this->setTimeout($timeout);
+        }
         $this->ch = curl_init();
     }
 
@@ -56,13 +59,20 @@ class HTTP extends Base {
      * @param array $options
      */
     public function search($query, array $options = array()) {
+        $result = false;
         if (is_array($query)) {
             /**
              * Array implies using the JSON query DSL
              */
+            $arg = "_search";
+            if(isset($options['routing'])) {
+                $arg = "_search?routing=" . $options['routing'];
+            }
+
             $url = $this->buildUrl(array(
-                $this->type, "_search"
+                $this->type, $arg
             ));
+
             $result = $this->call($url, "GET", $query);
         }
         elseif (is_string($query)) {
@@ -71,6 +81,15 @@ class HTTP extends Base {
              */
             $url = $this->buildUrl(array(
                 $this->type, "_search?q=" . $query
+            ));
+            $result = $this->call($url, "POST", $options);
+        }
+        else {
+            /**
+             * no http query string search
+             */
+            $url = $this->buildUrl(array(
+                $this->type, "_search?"
             ));
             $result = $this->call($url, "POST", $options);
         }
@@ -105,7 +124,7 @@ class HTTP extends Base {
         if ($options['refresh']) {
             $this->request('_refresh', "POST");
         }
-        return !isset($result['error']) && $result['ok'];
+        return !isset($result['error']);
     }
 
     /**
@@ -131,7 +150,7 @@ class HTTP extends Base {
      */
     public function delete($id=false, array $options = array()) {
         if ($id)
-            return $this->request(array($this->type, $id), "DELETE");
+            return $this->call($this->buildUrl(array($this->type, $id), $options), "DELETE");
         else
             return $this->request(false, "DELETE");
     }
@@ -145,12 +164,12 @@ class HTTP extends Base {
      * @param array|string|bool $payload The document/instructions to pass along
      * @throws HTTPException
      */
-    protected function call($url, $method="GET", $payload=false) {
+    protected function call($url, $method="GET", $payload=null) {
         $conn = $this->ch;
         $protocol = "http";
         $requestURL = $protocol . "://" . $this->host . $url;
         curl_setopt($conn, CURLOPT_URL, $requestURL);
-        curl_setopt($conn, CURLOPT_TIMEOUT, self::TIMEOUT);
+        curl_setopt($conn, CURLOPT_TIMEOUT, $this->timeout);
         curl_setopt($conn, CURLOPT_PORT, $this->port);
         curl_setopt($conn, CURLOPT_RETURNTRANSFER, 1) ;
         curl_setopt($conn, CURLOPT_CUSTOMREQUEST, strtoupper($method));
@@ -159,7 +178,7 @@ class HTTP extends Base {
         if ((is_array($payload) && count($payload) > 0) || is_string($payload) && $payload !== "")
             curl_setopt($conn, CURLOPT_POSTFIELDS, is_string($payload) ? $payload : json_encode($payload));
         else
-        	  curl_setopt($conn, CURLOPT_POSTFIELDS, null);
+        	curl_setopt($conn, CURLOPT_POSTFIELDS, null);
 
         $response = curl_exec($conn);
         if ($response !== false) {
@@ -213,5 +232,15 @@ class HTTP extends Base {
         }
 
         return $data;
+    }
+
+    public function setTimeout($timeout)
+    {
+        $this->timeout = $timeout;
+    }
+
+    public function getTimeout()
+    {
+        return $this->timeout;
     }
 }

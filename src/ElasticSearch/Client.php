@@ -23,7 +23,8 @@ class Client {
         'protocol' => Client::DEFAULT_PROTOCOL,
         'servers' => Client::DEFAULT_SERVER,
         'index' => Client::DEFAULT_INDEX,
-        'type' => Client::DEFAULT_TYPE
+        'type' => Client::DEFAULT_TYPE,
+        'timeout' => null,
     );
 
     protected static $_protocols = array(
@@ -32,7 +33,7 @@ class Client {
         'rabbitmq' => 'ElasticSearch\\Transport\\RabbitMQ',
     );
 
-    private $transport, $index, $type;
+    private $transport, $index, $type, $bulk;
 
     /**
      * Construct search client
@@ -67,6 +68,7 @@ class Client {
         if (is_string($config)) {
             $config = self::parseDsn($config);
         }
+
         $config += self::$_defaults;
 
         $protocol = $config['protocol'];
@@ -74,6 +76,10 @@ class Client {
             throw new \Exception("Tried to use unknown protocol: $protocol");
         }
         $class = self::$_protocols[$protocol];
+
+        if (null !== $config['timeout'] && !is_numeric($config['timeout'])) {
+            throw new \Exception("HTTP timeout should have a numeric value when specified.");
+        }
 
         $server = is_array($config['servers']) ? $config['servers'][0] : $config['servers'];
         list($host, $port) = explode(':', $server);
@@ -85,7 +91,6 @@ class Client {
 
         $reflector = new \ReflectionClass($class);
         $transport = $reflector->newInstanceArgs($params);
-
         $client = new self($transport, $config['index'], $config['type']);
         $client->config($config);
         return $client;
@@ -209,6 +214,9 @@ class Client {
      *        _refresh_ *bool* If set to true, immediately refresh the shard after indexing
      */
     public function index($document, $id=false, array $options = array()) {
+        if ($this->bulk) {
+            return $this->bulk->index($document, $id, $this->index, $this->type, $options);
+        }
         return $this->transport->index($document, $id, $options);
     }
 
@@ -235,6 +243,9 @@ class Client {
      * @param array $options Parameters to pass to delete action
      */
     public function delete($id=false, array $options = array()) {
+        if ($this->bulk) {
+            return $this->bulk->delete($id, $this->index, $this->type, $options);
+        }
         return $this->transport->delete($id, $options);
     }
 
@@ -255,7 +266,7 @@ class Client {
      * @return array
      */
     public function refresh() {
-        return $this->request('_refresh', "POST");
+        return $this->transport->request(array('_refresh'), 'GET');
     }
 
     /**
@@ -291,4 +302,56 @@ class Client {
         }
         return compact('protocol', 'servers', 'index', 'type');
     }
+
+    /**
+     * Create a bulk-transaction
+     *
+     * @return \Elasticsearch\Bulk
+     */
+
+    public function createBulk() {
+        return new Bulk($this);
+    }
+
+
+    /**
+     * Begin a transparent bulk-transaction
+     * if one is already running, return its handle
+     * @return \Elasticsearch\Bulk
+     */
+
+    public function beginBulk() {
+        if (!$this->bulk) {
+            $this->bulk = $this->createBulk($this);
+        }
+        return $this->bulk;
+    }
+
+    /**
+    * @see beginBulk
+    */
+    public function begin() {
+        return $this->beginBulk();
+    }
+
+    /**
+     * commit a bulk-transaction
+     * @return array
+     */
+
+    public function commitBulk() {
+        if ($this->bulk) {
+            $result = $this->bulk->commit();
+            $this->bulk = null;
+            return $result;
+        }
+    }
+
+    /**
+    * @see commitBulk
+    */
+    public function commit() {
+        return $this->commitBulk();
+    }
+
 }
