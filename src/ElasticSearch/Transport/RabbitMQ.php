@@ -4,7 +4,8 @@ namespace ElasticSearch\Transport;
 
 use \ElasticSearch\DSL\Stringify;
 
-use amqphp\Connection;
+use PhpAmqpLib\Connection\AMQPConnection;
+use PhpAmqpLib\Message\AMQPMessage;
 
 /**
  * This file is part of the ElasticSearch PHP client
@@ -19,6 +20,8 @@ class RabbitMQ extends Base {
 
     protected $user, $past, $vhost, $connParams;
 
+    protected $connection;
+
     public function __construct($host="127.0.0.1", $port=5672, $user = 'guest', $pass = 'guest', $vhost = '/') {
         parent::__construct($host, $port);
 
@@ -27,12 +30,10 @@ class RabbitMQ extends Base {
         $this->vhost = $vhost;
 
         $this->connParams = array(
-            'socketParams' => array(
-                'host' => $host,
-                'port' => $port,
-            ),
+            'host' => $host,
+            'port' => $port,
             'username' => $user,
-            'userpass' => $pass,
+            'password' => $pass,
             'vhost' => $vhost
         );
     }
@@ -129,28 +130,46 @@ class RabbitMQ extends Base {
            $message .= "\n";
         }
 
-        $params = array(
-            'content-encoding' => 'UTF-8',
-            'exchange' => 'elasticsearch',
-            'routing-key' => 'elasticsearch',
-        );
+        $exchange = 'elasticsearch';
+        $routingKey = 'elasticsearch';
 
         $conn = $this->_openConnection();
 
-        $channel = $conn->openChannel();
+        $channel = $conn->channel();
 
-        $msg = $channel->basic('publish', $params, $message);
-        $result =  array( 'result' => $channel->invoke($msg));
+        $channel->exchange_declare($exchange, 'direct', false, true, false);
+
+        $msg = new AMQPMessage($message, array('content_type' => 'text/plain', 'content_encoding' => 'UTF-8'));
+
+        $result = array('result' => $channel->basic_publish($msg, $exchange, $routingKey));
+
+        $channel->close();
 
         return $result;
     }
 
     protected function _openConnection()
     {
-        $conn = new Connection($this->connParams);
-        $conn->connect();
+        if(!$this->connection)
+        {
+            $this->connection = new AMQPConnection(
+                $this->connParams['host'],
+                $this->connParams['port'],
+                $this->connParams['username'],
+                $this->connParams['password'],
+                $this->connParams['vhost']
+            );
+        }
+        return $this->connection;
+    }
 
-        return $conn;
+    public function __destruct()
+    {
+        if($this->connection)
+        {
+            $this->connection->close();
+            $this->connection = null;
+        }
     }
 
 }
