@@ -163,13 +163,4 @@ class RabbitMQ extends Base {
         return $this->connection;
     }
 
-    public function __destruct()
-    {
-        if($this->connection)
-        {
-            $this->connection->close();
-            $this->connection = null;
-        }
-    }
-
 }
