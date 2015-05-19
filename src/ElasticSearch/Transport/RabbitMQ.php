@@ -20,8 +20,6 @@ class RabbitMQ extends Base {
 
     protected $user, $past, $vhost, $connParams;
 
-    protected $connection;
-
     public function __construct($host="127.0.0.1", $port=5672, $user = 'guest', $pass = 'guest', $vhost = '/') {
         parent::__construct($host, $port);
 
@@ -145,22 +143,19 @@ class RabbitMQ extends Base {
 
         $channel->close();
 
+        $conn->close();
+
         return $result;
     }
 
     protected function _openConnection()
     {
-        if(!$this->connection)
-        {
-            $this->connection = new AMQPConnection(
-                $this->connParams['host'],
-                $this->connParams['port'],
-                $this->connParams['username'],
-                $this->connParams['password'],
-                $this->connParams['vhost']
-            );
-        }
-        return $this->connection;
+        return new AMQPConnection(
+            $this->connParams['host'],
+            $this->connParams['port'],
+            $this->connParams['username'],
+            $this->connParams['password'],
+            $this->connParams['vhost']
+        );
     }
-
 }
